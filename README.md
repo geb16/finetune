@@ -1,38 +1,87 @@
-# Fine-tuning (SFT) with LoRA on CPU — modern, enterprise-style repo
+# Fine-tuning (SFT) with LoRA on CPU - learning demo
 
-This repo trains a small instruction-following model adapter (LoRA) to produce strict JSON outputs.
+This repo is a minimal, CPU-friendly fine-tuning demo. It trains a LoRA adapter on a small JSONL dataset so the model outputs strict JSON.
 
-## Why LoRA
-LoRA trains a tiny adapter instead of all weights, reducing compute and making CPU training feasible.
+## What this demo does
+- Uses a small seq2seq base model (`google/flan-t5-small`) for CPU training.
+- Trains LoRA adapters only (fast, light, easy to move to GPU later).
+- Produces JSON-only responses and validates them.
 
-## Setup (Windows PowerShell or Linux)
+## Requirements
+- Python 3.10+
+- CPU only is fine. If CUDA is available, inference will use it automatically.
+
+## Quick start (Windows PowerShell)
+Run these commands from the repo root (`E:\AWS\finetune-lora-cpu`):
+
+```powershell
 python -m venv .venv
-# Windows:
-`.venv\Scripts\activate`
-# Linux/macOS:
-`source .venv/bin/activate`
-
-```
+.\.venv\Scripts\activate
 pip install -U pip
 pip install -e .
+python -m ft.train_sft_lora
+python -m ft.generate_preds
+python -m ft.eval_json --path runs/latest/preds.jsonl
+python -m ft.infer --prompt "Ticket: user cannot login, 2FA fails after phone change."
 ```
 
-## Data
-- data/sft_train.jsonl
-- data/sft_valid.jsonl
-Each line contains {"system": "...", "user": "...", "assistant": "..."}.
+## Quick start (Linux/macOS)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e .
+python -m ft.train_sft_lora
+python -m ft.generate_preds
+python -m ft.eval_json --path runs/latest/preds.jsonl
+python -m ft.infer --prompt "Ticket: user cannot login, 2FA fails after phone change."
+```
 
-## Train (CPU)
+## Data format (no ambiguity)
+Files:
+- `data/sft_train.jsonl`
+- `data/sft_valid.jsonl`
+
+Each line must be a single JSON object with exactly these keys:
+```
+{"system": "...", "user": "...", "assistant": "..."}
+```
+
+Example line:
+```
+{"system":"You are a support incident summarizer. Output STRICT JSON only with keys: category, severity, summary, next_steps.","user":"Ticket: user cannot login, 2FA fails after phone change.","assistant":"{\"category\":\"auth\",\"severity\":\"high\",\"summary\":\"2FA fails after phone change\",\"next_steps\":[\"verify identity\",\"reset 2FA method\"]}"}
+```
+
+## Training
 ```
 python -m ft.train_sft_lora
 ```
 
-## Evaluate
+Outputs (created under `runs/latest`):
+- `lora_adapter/` (LoRA weights)
+- `tokenizer/`
+- `manifest.json` (metadata: base model, lengths, counts)
+
+If you want to keep multiple runs, edit `TrainConfig.out_dir` in `src/ft/config.py` before training.
+
+## Generate predictions (validation set)
+```
+python -m ft.generate_preds
+```
+
+This writes `runs/latest/preds.jsonl`, one JSON object per line.
+
+## Evaluate JSON validity
 ```
 python -m ft.eval_json --path runs/latest/preds.jsonl
 ```
 
-## Inference
+## Inference (single prompt)
 ```
-python -m ft.infer --prompt "Summarize this ticket: user can't login, 2FA failing after phone change."
+python -m ft.infer --prompt "Ticket: user cannot login, 2FA fails after phone change."
 ```
+
+## Troubleshooting
+- Warning about `temperature` being ignored: expected when `do_sample=False`.
+- If generation is not JSON: add more examples to the dataset or train for more epochs.
+- Adapter size mismatch: make sure the base model and tokenizer come from the same run, or retrain.

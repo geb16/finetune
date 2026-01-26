@@ -1,0 +1,3 @@
+[console_scripts]
+ft-infer = ft.infer:main
+ft-train = ft.train_sft_lora:main

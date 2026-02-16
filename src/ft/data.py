@@ -2,6 +2,10 @@ import json
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+JSON_SCHEMA_HINT = (
+    '{"category":"...","severity":"...","summary":"...","next_steps":["..."]}'
+)
+
 
 def load_jsonl(path: Path) -> List[Dict]:
     rows = []
@@ -20,7 +24,12 @@ def build_prompt(system: str, user: str) -> str:
     """
     system = system.strip()
     user = user.strip()
-    return f"### System:\n{system}\n\n### User:\n{user}\n\n### Assistant:\n"
+    return (
+        f"### System:\n{system}\n\n"
+        f"### Output Format:\n{JSON_SCHEMA_HINT}\n\n"
+        f"### User:\n{user}\n\n"
+        "### Assistant:\n"
+    )
 
 
 def format_chat_example(ex: Dict) -> Tuple[str, str]:

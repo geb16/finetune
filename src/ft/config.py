@@ -10,14 +10,15 @@ class TrainConfig:
     out_dir: Path = Path("runs/latest")
     max_source_len: int = 384
     max_target_len: int = 128
-    train_batch_size: int = 2
-    grad_accum: int = 8
-    epochs: int = 3
-    lr: float = 2e-4
-    lora_r: int = 8
-    lora_alpha: int = 16
-    lora_dropout: float = 0.05
-    lora_target_modules: tuple[str, ...] = ("q", "v")
+    train_batch_size: int = 1
+    grad_accum: int = 1
+    epochs: int = 30
+    lr: float = 1e-3
+    lora_r: int = 16
+    lora_alpha: int = 32
+    lora_dropout: float = 0.0
+    lora_target_modules: tuple[str, ...] = ("q", "k", "v", "o")
+    min_train_rows: int = 32
     seed: int = 42
 
 

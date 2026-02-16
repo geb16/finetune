@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import torch
@@ -26,6 +27,10 @@ def main() -> None:
 
     train_rows = load_jsonl(Path("data/sft_train.jsonl"))
     valid_rows = load_jsonl(Path("data/sft_valid.jsonl"))
+    if train_rows and len(train_rows) < cfg.min_train_rows:
+        mult = math.ceil(cfg.min_train_rows / len(train_rows))
+        train_rows = (train_rows * mult)[: cfg.min_train_rows]
+        print(f"Upsampled training rows to {len(train_rows)} for stable demo training.")
 
     train_prompts, train_targets = [], []
     for row in train_rows:
@@ -65,7 +70,7 @@ def main() -> None:
     )
 
     model = AutoModelForSeq2SeqLM.from_pretrained(cfg.base_model)
-    model.resize_token_embeddings(len(tokenizer))
+    # model.resize_token_embeddings(len(tokenizer))
 
     # LoRA: parameter-efficient fine-tuning (train small adapters instead of whole model).
     lora = LoraConfig(
@@ -83,13 +88,20 @@ def main() -> None:
     # Some older HF versions don't expose evaluation/save strategy params; filter for compatibility.
     use_cuda = torch.cuda.is_available()
     use_bf16 = use_cuda and torch.cuda.is_bf16_supported()
+    num_batches = math.ceil(len(train_rows) / cfg.train_batch_size)
+    grad_accum = min(cfg.grad_accum, max(1, num_batches))
+    if grad_accum != cfg.grad_accum:
+        print(
+            f"Adjusted gradient_accumulation_steps from {cfg.grad_accum} to {grad_accum} "
+            f"(batches/epoch={num_batches})."
+        )
     base_args = {
         "output_dir": str(cfg.out_dir),
         "overwrite_output_dir": True,
         "num_train_epochs": cfg.epochs,
         "per_device_train_batch_size": cfg.train_batch_size,
         "per_device_eval_batch_size": cfg.train_batch_size,
-        "gradient_accumulation_steps": cfg.grad_accum,
+        "gradient_accumulation_steps": grad_accum,
         "learning_rate": cfg.lr,
         "logging_steps": 10,
         "report_to": "none",
@@ -126,7 +138,12 @@ def main() -> None:
     # Save a mini training manifest (enterprise habit)
     manifest = {
         "base_model": cfg.base_model,
-        "lora": {"r": cfg.lora_r, "alpha": cfg.lora_alpha, "dropout": cfg.lora_dropout},
+        "lora": {
+            "r": cfg.lora_r,
+            "alpha": cfg.lora_alpha,
+            "dropout": cfg.lora_dropout,
+            "target_modules": list(cfg.lora_target_modules),
+        },
         "max_source_len": cfg.max_source_len,
         "max_target_len": cfg.max_target_len,
         "epochs": cfg.epochs,

@@ -7,6 +7,7 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from ft.config import TrainConfig, load_manifest
 from ft.data import build_prompt
+from ft.json_utils import repair_json
 
 DATA = "data/sft_valid.jsonl"
 OUT = "runs/latest/preds.jsonl"
@@ -41,6 +42,8 @@ def main():
                     **inputs,
                     max_new_tokens=120,
                     do_sample=False,
+                    num_beams=2,
+                    early_stopping=True,
                     repetition_penalty=1.2,
                     no_repeat_ngram_size=3,
                     eos_token_id=tokenizer.eos_token_id,
@@ -51,7 +54,8 @@ def main():
             answer = text.strip()
             if answer.startswith("### Assistant:"):
                 answer = answer.split("### Assistant:", 1)[-1].strip()
-            out.write(answer + "\n")
+            repaired = repair_json(answer)
+            out.write((repaired or answer) + "\n")
 
 if __name__ == "__main__":
     main()

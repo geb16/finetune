@@ -9,12 +9,23 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from ft.config import TrainConfig, load_manifest
 from ft.data import build_prompt
+from ft.json_utils import repair_json
 
 
+# SYSTEM_PROMPT = (
+#     "You are a support incident summarizer. "
+#     "Output STRICT JSON only with keys: category, severity, summary, next_steps."
+# )
 SYSTEM_PROMPT = (
-    "You are a support incident summarizer. "
-    "Output STRICT JSON only with keys: category, severity, summary, next_steps."
+    "You are a support incident summarizer.\n"
+    "Return ONLY valid minified JSON.\n"
+    "Rules:\n"
+    "- Output must be a single JSON object\n"
+    "- Use ASCII double quotes (\") only\n"
+    "- No trailing commas\n"
+    "- Keys must be exactly: category, severity, summary, next_steps\n"
 )
+
 
 
 def _resolve_base_model(run_dir: Path) -> str:
@@ -22,11 +33,11 @@ def _resolve_base_model(run_dir: Path) -> str:
     return manifest.get("base_model", TrainConfig().base_model)
 
 
-def _clean_answer(text: str) -> str:
-    text = text.strip()
-    if text.startswith("### Assistant:"):
-        return text.split("### Assistant:", 1)[-1].strip()
-    return text
+# def _clean_answer(text: str) -> str:
+#     text = text.strip()
+#     if text.startswith("### Assistant:"):
+#         return text.split("### Assistant:", 1)[-1].strip()
+#     return text
 
 
 def main() -> None:
@@ -41,7 +52,7 @@ def main() -> None:
         tokenizer.pad_token = tokenizer.eos_token
     base_model = _resolve_base_model(run_dir)
     base = AutoModelForSeq2SeqLM.from_pretrained(base_model)
-    base.resize_token_embeddings(len(tokenizer))
+    #base.resize_token_embeddings(len(tokenizer))
     model = PeftModel.from_pretrained(base, run_dir / "lora_adapter")
     model.eval()
 
@@ -56,17 +67,19 @@ def main() -> None:
         out = model.generate(
             **inputs,
             max_new_tokens=120,
-            temperature=0.0,
             do_sample=False,
+            num_beams=2,
+            early_stopping=True,
             repetition_penalty=1.2,
             no_repeat_ngram_size=3,
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.pad_token_id,
         )
 
-    text = tokenizer.decode(out[0], skip_special_tokens=True)
-    answer = _clean_answer(text)
-    print(answer)
+    #text = tokenizer.decode(out[0], skip_special_tokens=True)
+    answer = tokenizer.decode(out[0], skip_special_tokens=True).strip()
+    repaired = repair_json(answer)
+    print(repaired or answer)
 
 if __name__ == "__main__":
     main()
